@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import einops
 
 
 def window_partition(x, window_size):
@@ -12,9 +13,8 @@ def window_partition(x, window_size):
     Returns:
         windows: (num_windows*B, window_size, window_size, C)
     """
-    B, H, W, C = x.shape
-    x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    windows = einops.rearrange(x, 'b (h p1) (w p2) c -> (b h w) p1 p2 c', p1=window_size, p2=window_size)
+
     return windows
 
 
@@ -29,9 +29,8 @@ def window_reverse(windows, window_size, H, W):
     Returns:
         x: (B, H, W, C)
     """
-    B = int(windows.shape[0] / (H * W / window_size / window_size))
-    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
+    x = einops.rearrange(windows, '(b h w) p1 p2 c -> b (h p1) (w p2) c', h=H // window_size, w=W // window_size)
+
     return x
 
 
@@ -67,7 +66,8 @@ def swin_attention_func(x, bias, mask, scale_qk, f_qkv, heads, window_size, shif
 
     # W-MSA/SW-MSA
     qkv = f_qkv(x_windows).reshape(B_, N, 3, heads, C // heads).permute(2, 0, 3, 1, 4)
-    q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)\
+    q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+
     attn_windows = mha_core(q, k, v, bias, mask, scale_qk)
 
     # merge windows

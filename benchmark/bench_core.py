@@ -41,10 +41,8 @@ def forward(batch, h, w, head, head_dim, patch, bias=None, bf16=False, method=Be
         v = v.to(torch.bfloat16)
 
     if method == BenchMethod.SWIN:
-        f = mha_core
         t, memory = measure_speed_memory(mha_core, q, k, v, bias, None, 1.0)
     elif method == BenchMethod.FLASH:
-        f = flash_attn_func
         t, memory = measure_speed_memory(flash_attn_func, q, k, v)
     elif method == BenchMethod.FLASH_SWIN:
         t, memory = measure_speed_memory(flash_swin_attn_fwd_func, q, k, v, bias, 1.0, head, patch, patch, 0, 0)
@@ -53,12 +51,10 @@ def forward(batch, h, w, head, head_dim, patch, bias=None, bf16=False, method=Be
 
 
 if __name__ == '__main__':
-    batch, h, w, head, head_dim, patch = 8, 64, 64, 4, 16, 32
+    batch, h, w, head, head_dim, patch = 8, 128, 128, 4, 128, 8
     bias = None
-    bf16 = False
+    bf16 = True
 
     for method in BenchMethod:
-        if method == BenchMethod.FLASH_SWIN:
-            continue
         t, memory = forward(batch, h, w, head, head_dim, patch, bias, bf16, method)
         print(f"{method.name}: {t:.5f} {memory:.5f}")
