@@ -23,6 +23,7 @@ def _window_fwd_kernel(
     patch_w: tl.constexpr,
     shift_h: tl.constexpr,
     shift_w: tl.constexpr,
+    dtype: tl.constexpr
 ):
     batch_id = tl.program_id(0) // head
     head_id = tl.program_id(0) % head
@@ -98,7 +99,7 @@ def _window_fwd_kernel(
         qk = tl.math.exp(qk)
         p_sum = tl.sum(qk, axis=1, keep_dims=True)
         qk /= p_sum
-        
+
         # save log_sum_exp
         p_sum = tl.reshape(p_sum, (patch_h, patch_w))
         Lse_ptr = tl.make_block_ptr(
@@ -109,7 +110,7 @@ def _window_fwd_kernel(
             block_shape=(patch_h, patch_w),
             order=(1, 0),
         )
-        tl.store(Lse_ptr, tl.math.log(p_sum), boundary_check=(0, 1))
+        tl.store(Lse_ptr, tl.math.log(p_sum).cast(dtype), boundary_check=(0, 1))
 
         # save output
         V_ptr = tl.make_block_ptr(
