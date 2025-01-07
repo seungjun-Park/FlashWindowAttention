@@ -3,9 +3,13 @@ import torch
 import triton
 
 
-def flash_swin_attn_fwd_func(Q, K, V, bias, scale_qk, head, patch_h, patch_w, shift_h, shift_w, head_chunk=1):
+MAX_HEAD_DIM = 128
+
+
+def flash_swin_attn_fwd_func(Q, K, V, bias, scale_qk, head, patch_h, patch_w, shift_h, shift_w):
     batch, img_h, img_w, c = Q.size()
     head_dim = c // head
+    head_chunk = 1 if head_dim <= MAX_HEAD_DIM else head_dim // MAX_HEAD_DIM
     O = torch.empty_like(Q)
     O_lse = torch.empty((batch, head, img_h, img_w), device=Q.device, dtype=torch.float32)
 
