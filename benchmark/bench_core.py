@@ -5,23 +5,7 @@ from torch import nn
 import itertools
 from flash_attn import flash_attn_func
 import time
-from utils import BenchMethod
-
-
-def measure_speed_memory(f, *args, **kwargs):
-    # warm up
-    f(*args, **kwargs)
-
-    torch.cuda.reset_peak_memory_stats()
-    torch.cuda.synchronize()
-    start = time.time()
-    for i in range(100):
-        f(*args, **kwargs)
-    torch.cuda.synchronize()
-    t = time.time() - start
-    memory = torch.cuda.max_memory_allocated() / 1000000
-
-    return t, memory
+from utils import BenchMethod, measure_speed_memory
 
 
 @torch.inference_mode
@@ -31,7 +15,7 @@ def forward(batch, h, w, head, head_dim, patch, bias=None, bf16=False, method=Be
         q = torch.randn(batch * n_patch, head, patch ** 2, head_dim).cuda()
         k = torch.randn(batch * n_patch, head, patch ** 2, head_dim).cuda()
         v = torch.randn(batch * n_patch, head, patch ** 2, head_dim).cuda()
-    else:
+    elif method == BenchMethod.FLASH_SWIN:
         q = torch.randn(batch, h, w, head * head_dim).cuda()
         k = torch.randn(batch, h, w, head * head_dim).cuda()
         v = torch.randn(batch, h, w, head * head_dim).cuda()
