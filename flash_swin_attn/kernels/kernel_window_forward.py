@@ -18,10 +18,9 @@ def _window_fwd_kernel(
     head_dim: tl.constexpr,
     head_chunk: tl.constexpr,
     chunk_dim: tl.constexpr,
-    patch_h: tl.constexpr,
-    patch_w: tl.constexpr,
-    shift_h: tl.constexpr,
-    shift_w: tl.constexpr,
+    patch: tl.constexpr,
+    patch_pad: tl.constexpr,
+    shift: tl.constexpr,
 ):
     batch_id = tl.program_id(0) // head
     head_id = tl.program_id(0) % head
@@ -32,38 +31,38 @@ def _window_fwd_kernel(
     stride_batch = stride_img_h * img_h
 
     off_batch = batch_id * stride_batch
-    off_h = block_h_id * patch_h + shift_h
-    off_w = shift_w
+    off_h = block_h_id * patch + shift
+    off_w = shift
     off_head = head_id * head_dim
-    if shift_h > 0:
-        off_h -= patch_h
-    if shift_w > 0:
-        off_w -= patch_w
+    if shift> 0:
+        off_h -= patch
+        off_w -= patch
 
     # load bias
     if bias is not None:
-        # (head, patch_h * patch_w, patch_h * patch_w)
-        patch = patch_h * patch_w
+        # (head, patch * patch, patch * patch)
+        patch_2 = patch * patch
         Bias_ptr = tl.make_block_ptr(
-            base=bias + head_id * patch * patch,
-            shape=(patch, patch),
-            strides=(patch, 1),
+            base=bias + head_id * patch_2 * patch_2,
+            shape=(patch_2, patch_2),
+            strides=(patch_2, 1),
             offsets=(0, 0),
-            block_shape=(patch_h * patch_w, patch_h * patch_w),  # TODO: (patch, patch) doesn't work
+            block_shape=(patch_pad * patch_pad, patch_pad * patch_pad),
             order=(1, 0),
         )
-        bias_data = tl.load(Bias_ptr)
+        bias_data = tl.load(Bias_ptr, boundary_check=(0, 1))
 
-    mask_h = (off_h + tl.arange(0, patch_h * patch_w) // patch_w) < img_h
-    for off_w_loop in range(off_w, img_w, patch_w):
+    mask_h = (tl.arange(0, patch_pad) < patch) & (off_h + tl.arange(0, patch_pad) < img_h)
+
+    for off_w_loop in range(off_w, img_w, patch):
         # compute attn matrix
-        qk = tl.zeros((patch_h * patch_w, patch_h * patch_w), dtype=tl.float32)
+        attn = tl.zeros((patch_pad * patch_pad, patch_pad * patch_pad), dtype=tl.float32)
         Q_ptr = tl.make_block_ptr(
             base=Q + off_batch,
             shape=(img_h, img_w, channels),
             strides=(stride_img_h, channels, 1),
             offsets=(off_h, off_w_loop, off_head),
-            block_shape=(patch_h, patch_w, chunk_dim),
+            block_shape=(patch_pad, patch_pad, chunk_dim),
             order=(2, 1, 0),
         )
         K_ptr = tl.make_block_ptr(
@@ -71,32 +70,37 @@ def _window_fwd_kernel(
             shape=(img_h, img_w, channels),
             strides=(stride_img_h, channels, 1),
             offsets=(off_h, off_w_loop, off_head),
-            block_shape=(patch_h, patch_w, chunk_dim),
+            block_shape=(patch_pad, patch_pad, chunk_dim),
             order=(2, 1, 0),
         )
         for _ in range(head_chunk):
             # load data
             q_data = tl.load(Q_ptr, boundary_check=(0, 1), padding_option="zero")
             k_data = tl.load(K_ptr, boundary_check=(0, 1), padding_option="zero")
-            q_data = tl.reshape(q_data, (patch_h * patch_w, chunk_dim))
-            k_data = tl.reshape(k_data, (patch_h * patch_w, chunk_dim))
+            q_data = tl.reshape(q_data, (patch_pad * patch_pad, chunk_dim))
+            k_data = tl.reshape(k_data, (patch_pad * patch_pad, chunk_dim))
             # dot of bf16 -> fp32
-            qk = tl.dot(q_data, k_data.trans(1, 0), qk)
+            attn = tl.dot(q_data, k_data.trans(1, 0), attn)
             Q_ptr = tl.advance(Q_ptr, (0, 0, chunk_dim))
             K_ptr = tl.advance(K_ptr, (0, 0, chunk_dim))
 
-        qk *= scale_qk
+        attn *= scale_qk
         # apply bias and boundary mask
         if bias is not None:
-            qk += bias_data
-        mask_w = (off_w_loop + tl.arange(0, patch_h * patch_w) % patch_w) < img_w
-        qk += tl.where(mask_h & mask_w, 0, -float("inf"))
+            attn += bias_data
+        
+        # TODO:
+        mask_w = (tl.arange(0, patch_pad) < patch) & (off_w_loop + tl.arange(0, patch_pad) < img_h)
+        mask_attn = mask_h[:, None] & mask_w[None, :]
+        mask_attn = mask_attn.reshape(1, patch_pad * patch_pad)
+        attn += tl.where(mask_attn, 0, -float("inf"))
 
         # softmax
-        qk -= tl.max(qk, axis=1, keep_dims=True)
-        qk = tl.math.exp(qk)
-        p_sum = tl.sum(qk, axis=1, keep_dims=True)
-        qk /= p_sum
+        attn -= tl.max(attn, axis=1, keep_dims=True)
+        attn = tl.math.exp(attn)
+        p_sum = tl.sum(attn, axis=1, keep_dims=True)
+        attn /= p_sum
+        attn = attn.cast(Q.dtype.element_ty)
 
         # save output
         V_ptr = tl.make_block_ptr(
@@ -104,24 +108,24 @@ def _window_fwd_kernel(
             shape=(img_h, img_w, channels),
             strides=(stride_img_h, channels, 1),
             offsets=(off_h, off_w_loop, off_head),
-            block_shape=(patch_h, patch_w, chunk_dim),
+            block_shape=(patch_pad, patch_pad, chunk_dim),
             order=(2, 1, 0),
         )
-        O_ptr = tl.make_block_ptr(
-            base=O + off_batch,
-            shape=(img_h, img_w, channels),
-            strides=(stride_img_h, channels, 1),
-            offsets=(off_h, off_w_loop, off_head),
-            block_shape=(patch_h, patch_w, chunk_dim),
-            order=(2, 1, 0),
+        index = (
+            off_batch
+            + tl.arange(off_h, off_h + patch_pad)[:, None, None] * stride_img_h
+            + tl.arange(off_w_loop, off_w_loop + patch_pad)[None, :, None] * stride_img_w
+            + tl.arange(off_head, off_head + chunk_dim)[None, None, :]
         )
+        O_ptr = O + index
 
         for _ in range(head_chunk):
             v_data = tl.load(V_ptr, boundary_check=(0, 1), padding_option="zero")
-            v_data = tl.reshape(v_data, (patch_h * patch_w, chunk_dim))
-            o_data = tl.dot(qk.cast(v_data.dtype), v_data)
-            o_data = tl.reshape(o_data, (patch_h, patch_w, chunk_dim))
-            tl.store(O_ptr, o_data.cast(v_data.dtype), boundary_check=(0, 1, 2))
+            v_data = tl.reshape(v_data, (patch_pad * patch_pad, chunk_dim))
+            o_data = tl.dot(attn, v_data)
+            o_data = tl.reshape(o_data, (patch_pad, patch_pad, chunk_dim))
+            o_data = o_data.cast(Q.dtype.element_ty)
 
+            tl.store(O_ptr, o_data, mask=mask_attn.reshape(patch_pad, patch_pad, 1))
             V_ptr = tl.advance(V_ptr, (0, 0, chunk_dim))
-            O_ptr = tl.advance(O_ptr, (0, 0, chunk_dim))
+            O_ptr += chunk_dim
