@@ -11,8 +11,6 @@ def flash_swin_attn_fwd_func(Q, K, V, bias, scale_qk, head, patch_h, patch_w, sh
     head_dim = c // head
     head_chunk = 1 if head_dim <= MAX_HEAD_DIM else head_dim // MAX_HEAD_DIM
     O = torch.empty_like(Q)
-    O_lse = torch.empty((batch, head, img_h, img_w), device=Q.device, dtype=Q.dtype)
-    dtype = triton.language.bfloat16 if Q.dtype == torch.bfloat16 else triton.language.float32
 
     # deal with shift
     delta_h = 0 if shift_h == 0 else patch_h
@@ -23,7 +21,6 @@ def flash_swin_attn_fwd_func(Q, K, V, bias, scale_qk, head, patch_h, patch_w, sh
         V,
         bias,
         O,
-        O_lse,
         scale_qk,
         img_h,
         img_w,
@@ -35,7 +32,6 @@ def flash_swin_attn_fwd_func(Q, K, V, bias, scale_qk, head, patch_h, patch_w, sh
         patch_w,
         shift_h,
         shift_w,
-        dtype
     )
 
-    return O, O_lse
+    return O

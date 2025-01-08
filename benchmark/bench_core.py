@@ -38,7 +38,7 @@ if __name__ == '__main__':
     batch, h, w, head, head_dim, patch = 8, 128, 128, 4, 128, 8
     bias = None
     bf16 = True
-
+    # bias = torch.randn(head, patch ** 2, patch ** 2).cuda().to(torch.bfloat16)
     for method in BenchMethod:
         t, memory = forward(batch, h, w, head, head_dim, patch, bias, bf16, method)
         print(f"{method.name}: {t:.5f} {memory:.5f}")

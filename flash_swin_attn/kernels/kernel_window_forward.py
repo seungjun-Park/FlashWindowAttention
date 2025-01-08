@@ -11,7 +11,6 @@ def _window_fwd_kernel(
     V,
     bias,
     O,
-    O_lse,
     scale_qk: tl.constexpr,
     img_h: tl.constexpr,
     img_w: tl.constexpr,
@@ -23,7 +22,6 @@ def _window_fwd_kernel(
     patch_w: tl.constexpr,
     shift_h: tl.constexpr,
     shift_w: tl.constexpr,
-    dtype: tl.constexpr
 ):
     batch_id = tl.program_id(0) // head
     head_id = tl.program_id(0) % head
@@ -99,18 +97,6 @@ def _window_fwd_kernel(
         qk = tl.math.exp(qk)
         p_sum = tl.sum(qk, axis=1, keep_dims=True)
         qk /= p_sum
-
-        # save log_sum_exp
-        p_sum = tl.reshape(p_sum, (patch_h, patch_w))
-        Lse_ptr = tl.make_block_ptr(
-            base=O_lse + tl.program_id(0) * img_h * img_w,
-            shape=(img_h, img_w),
-            strides=(img_w, 1),
-            offsets=(off_h, off_w_loop),
-            block_shape=(patch_h, patch_w),
-            order=(1, 0),
-        )
-        tl.store(Lse_ptr, tl.math.log(p_sum).cast(dtype), boundary_check=(0, 1))
 
         # save output
         V_ptr = tl.make_block_ptr(

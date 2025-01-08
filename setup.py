@@ -6,6 +6,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'torch',
+        'einops',
     ],
     entry_points={
         'console_scripts': [
@@ -17,7 +18,7 @@ setup(
     description='Flash Swin attention: 10x faster shifted window attention',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    url='https://github.com/yourusername/FlashSwinAttention',
+    url='https://github.com/zzd1992/FlashSwinAttention',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',

@@ -20,8 +20,9 @@ def forward_core(batch, h, w, head, head_dim, patch, bias=None):
     q = torch.randn(batch, h, w, head * head_dim).cuda()
     k = torch.randn(batch, h, w, head * head_dim).cuda()
     v = torch.randn(batch, h, w, head * head_dim).cuda()
-
-    o1, _ = flash_swin_attn_fwd_func(q, k, v, bias, 1.0, head, patch, patch, 0, 0)
+    bias = torch.randn(head, patch ** 2, patch ** 2).cuda()
+    
+    o1 = flash_swin_attn_fwd_func(q, k, v, bias, 1.0, head, patch, patch, 0, 0)
 
     q_ = einops.rearrange(q, 'b (h p) (w q) (head c) -> (b h w) head (p q) c', p=patch, q=patch, head=head)
     k_ = einops.rearrange(k, 'b (h p) (w q) (head c) -> (b h w) head (p q) c', p=patch, q=patch, head=head)
@@ -44,7 +45,7 @@ def forward_attn(batch, h, w, head, head_dim, patch, shift, bias=None):
     k = k.contiguous()
     v = v.contiguous()
 
-    o1, _ = flash_swin_attn_fwd_func(q, k, v, bias, 1.0, head, patch, patch, shift, shift)
+    o1 = flash_swin_attn_fwd_func(q, k, v, bias, 1.0, head, patch, patch, shift, shift)
     o2 = swin_attention_func(x, bias, None, 1.0, f_qkv, head, patch, shift)
 
     if shift == 0:
