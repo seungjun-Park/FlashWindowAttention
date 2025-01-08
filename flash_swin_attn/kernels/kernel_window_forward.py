@@ -41,7 +41,7 @@ def _window_fwd_kernel(
     # load bias
     if bias is not None:
         # (head, patch * patch, patch * patch)
-        patch_2 = patch * patch
+        patch_2 = patch_pad * patch_pad
         Bias_ptr = tl.make_block_ptr(
             base=bias + head_id * patch_2 * patch_2,
             shape=(patch_2, patch_2),
@@ -50,7 +50,7 @@ def _window_fwd_kernel(
             block_shape=(patch_pad * patch_pad, patch_pad * patch_pad),
             order=(1, 0),
         )
-        bias_data = tl.load(Bias_ptr, boundary_check=(0, 1))
+        bias_data = tl.load(Bias_ptr)
 
     mask_h = (tl.arange(0, patch_pad) < patch) & (off_h + tl.arange(0, patch_pad) < img_h)
 
@@ -75,8 +75,9 @@ def _window_fwd_kernel(
         )
         for _ in range(head_chunk):
             # load data
-            q_data = tl.load(Q_ptr, boundary_check=(0, 1), padding_option="zero")
-            k_data = tl.load(K_ptr, boundary_check=(0, 1), padding_option="zero")
+            # TODO: fix boundary check
+            q_data = tl.load(Q_ptr, boundary_check=(0, 1, 2), padding_option="zero")
+            k_data = tl.load(K_ptr, boundary_check=(0, 1, 2), padding_option="zero")
             q_data = tl.reshape(q_data, (patch_pad * patch_pad, chunk_dim))
             k_data = tl.reshape(k_data, (patch_pad * patch_pad, chunk_dim))
             # dot of bf16 -> fp32
@@ -102,6 +103,7 @@ def _window_fwd_kernel(
         attn /= p_sum
         attn = attn.cast(Q.dtype.element_ty)
 
+        
         # save output
         V_ptr = tl.make_block_ptr(
             base=V + off_batch,
@@ -112,15 +114,14 @@ def _window_fwd_kernel(
             order=(2, 1, 0),
         )
         index = (
-            off_batch
-            + tl.arange(off_h, off_h + patch_pad)[:, None, None] * stride_img_h
-            + tl.arange(off_w_loop, off_w_loop + patch_pad)[None, :, None] * stride_img_w
-            + tl.arange(off_head, off_head + chunk_dim)[None, None, :]
+            off_batch + off_h * stride_img_h + off_w_loop * channels + off_head + 
+            tl.arange(0, patch_pad)[:, None, None] * stride_img_h + 
+            tl.arange(0, patch_pad)[None, :, None] * channels + 
+            tl.arange(0, chunk_dim)[None, None, :]
         )
         O_ptr = O + index
-
         for _ in range(head_chunk):
-            v_data = tl.load(V_ptr, boundary_check=(0, 1), padding_option="zero")
+            v_data = tl.load(V_ptr, boundary_check=(0, 1, 2), padding_option="zero")
             v_data = tl.reshape(v_data, (patch_pad * patch_pad, chunk_dim))
             o_data = tl.dot(attn, v_data)
             o_data = tl.reshape(o_data, (patch_pad, patch_pad, chunk_dim))

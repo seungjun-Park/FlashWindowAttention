@@ -7,7 +7,7 @@ MAX_HEAD_DIM = 128
 
 
 def ceil_pow2(x):
-    n = x.bit_length()
+    n = x.bit_length() - 1
     if x == (1 << n):
         return x
     else:
