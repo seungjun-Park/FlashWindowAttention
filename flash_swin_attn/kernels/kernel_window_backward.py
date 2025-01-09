@@ -116,7 +116,7 @@ def _window_bwd_kernel(
 
             # accumulate d_attn
             d_attn = tl.dot(d_o_data, v_data.trans(1, 0), d_attn)
-            d_v_data =  tl.dot(attn.trans(1, 0), d_o_data).cast(Q.dtype.element_ty)
+            d_v_data = tl.dot(attn.trans(1, 0), d_o_data).cast(Q.dtype.element_ty)
             tl.store(d_V_ptr, d_v_data, mask=mask[:, None])
 
             d_O_ptr = tl.advance(d_O_ptr, (0, chunk_dim))
@@ -134,7 +134,7 @@ def _window_bwd_kernel(
             index_bias = head_id * seq * seq + tl.arange(0, seq_pad)[:, None] * seq + tl.arange(0, seq_pad)[None, :]
             d_Bias_ptr = d_bias + index_bias
             tl.atomic_add(d_Bias_ptr, d_attn, mask=(mask[:, None] & mask[None, :]))
-        
+
         # compute d_Q, d_K
         Q_ptr = tl.make_block_ptr(
             base=Q + offset,

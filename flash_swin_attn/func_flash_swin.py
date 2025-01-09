@@ -3,7 +3,7 @@ import torch
 import triton
 
 
-MAX_HEAD_DIM = 128
+MAX_CHUNK_DIM = 16
 
 
 def ceil_pow2(x):
@@ -11,19 +11,17 @@ def ceil_pow2(x):
     if x == (1 << n):
         return x
     else:
-        return 1 << (n + 1)    
+        return 1 << (n + 1)
 
 
-def flash_swin_attn_fwd_func(Q, K, V, bias, scale_qk, head, patch, shift):
-    batch, img_h, img_w, c = Q.size()
-    head_dim = c // head
-    head_chunk = 1 if head_dim <= MAX_HEAD_DIM else head_dim // MAX_HEAD_DIM
-    patch_pad = ceil_pow2(patch)
+def flash_swin_attn_fwd_func(Q, K, V, bias, scale_qk):
+    batch, head, seq, head_dim = Q.size()
+    seq_pad = ceil_pow2(seq)
+    head_chunk = 1 if head_dim <= MAX_CHUNK_DIM else head_dim // MAX_CHUNK_DIM
+    chunk_dim = head_dim // head_chunk
     O = torch.empty_like(Q)
 
-    # deal with shift
-    delta_h = 0 if shift == 0 else patch
-    grid = (batch * head, triton.cdiv(img_h + delta_h, patch), 1)
+    grid = (triton.cdiv(batch, 8), head, 1)
     _window_fwd_kernel[grid](
         Q,
         K,
@@ -31,54 +29,67 @@ def flash_swin_attn_fwd_func(Q, K, V, bias, scale_qk, head, patch, shift):
         bias,
         O,
         scale_qk,
-        img_h,
-        img_w,
+        batch,
         head,
         head_dim,
         head_chunk,
-        head_dim // head_chunk,
-        patch,
-        patch_pad,
-        shift,
+        chunk_dim,
+        seq,
+        seq_pad,
     )
 
     return O
 
 
-def flash_swin_attn_bwd_func(Q, K, V, d_O, bias, scale_qk, head, patch_h, patch_w, shift_h, shift_w):
-    batch, img_h, img_w, c = Q.size()
-    head_dim = c // head
-    head_chunk = 1 if head_dim <= MAX_HEAD_DIM else head_dim // MAX_HEAD_DIM
+def flash_swin_attn_bwd_func(Q, K, V, bias, d_O, scale_qk):
+    batch, head, seq, head_dim = Q.size()
+    seq_pad = ceil_pow2(seq)
+    head_chunk = 1 if head_dim <= MAX_CHUNK_DIM else head_dim // MAX_CHUNK_DIM
+    chunk_dim = head_dim // head_chunk
 
     d_Q = torch.empty_like(Q)
     d_K = torch.empty_like(K)
     d_V = torch.empty_like(V)
-    d_Bias = torch.zeros_like(bias) if bias is not None else None
-    
-    # deal with shift
-    delta_h = 0 if shift_h == 0 else patch_h
-    grid = (batch * head, triton.cdiv(img_h + delta_h, patch_h), 1)
+    d_bias = torch.zeros_like(bias) if bias is not None else None
+
+    grid = (triton.cdiv(batch, 8), head, 1)
     _window_bwd_kernel[grid](
-            Q,
-            K,
-            V,
-            bias,
-            d_O,
-            d_Q,
-            d_K,
-            d_V,
-            d_Bias,
-            scale_qk,
-            img_h,
-            img_w,
-            head,
-            head_dim,
-            head_chunk,
-            head_dim // head_chunk,
-            patch_h,
-            patch_w,
-            shift_h,
-            shift_w,
-        )
-    
-    return d_Q, d_K, d_V, d_Bias
+        Q,
+        K,
+        V,
+        bias,
+        d_O,
+        d_Q,
+        d_K,
+        d_V,
+        d_bias,
+        scale_qk,
+        batch,
+        head,
+        head_dim,
+        head_chunk,
+        chunk_dim,
+        seq,
+        seq_pad,
+    )
+
+    return d_Q, d_K, d_V, d_bias
+
+
+class FlashSwinFunc(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, q, k, v, bias, scale_qk):
+        o = flash_swin_attn_fwd_func(q, k, v, bias, scale_qk)
+        ctx.save_for_backward(q, k, v, bias)
+        ctx.scale_qk = scale_qk
+        return o
+
+    @staticmethod
+    def backward(ctx, d_o):
+        q, k, v, bias = ctx.saved_tensors
+        d_q, d_k, d_v, d_bias = flash_swin_attn_bwd_func(q, k, v, bias, d_o, ctx.scale_qk)
+
+        return d_q, d_k, d_v, d_bias, None
+
+
+flash_swin_attn_func = FlashSwinFunc.apply

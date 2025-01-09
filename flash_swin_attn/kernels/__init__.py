@@ -1,3 +1,2 @@
 from .kernel_window_forward import _window_fwd_kernel
 from .kernel_window_backward import _window_bwd_kernel
-from .flash_attn_triton import flash_attn_func

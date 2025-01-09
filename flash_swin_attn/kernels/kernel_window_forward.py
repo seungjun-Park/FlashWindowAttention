@@ -40,7 +40,7 @@ def _window_fwd_kernel(
             order=(1, 0),
         )
         bias_data = tl.load(Bias_ptr, boundary_check=(0, 1), padding_option="zero")
-    
+
     mask = tl.arange(0, seq_pad) < seq
     for _ in range(batch_id, min(batch_id + 8, batch)):
         # compute attn matrix
@@ -70,7 +70,6 @@ def _window_fwd_kernel(
             Q_ptr = tl.advance(Q_ptr, (0, chunk_dim))
             K_ptr = tl.advance(K_ptr, (0, chunk_dim))
 
-        
         attn *= scale_qk
         if bias is not None:
             attn += bias_data
@@ -83,7 +82,7 @@ def _window_fwd_kernel(
         p_sum = tl.sum(attn, axis=1, keep_dims=True)
         attn /= p_sum
         attn = attn.cast(Q.dtype.element_ty)
-        
+
         # save output
         V_ptr = tl.make_block_ptr(
             base=V + offset,
@@ -102,6 +101,5 @@ def _window_fwd_kernel(
             tl.store(O_ptr, o_data, mask=mask[:, None])
             V_ptr = tl.advance(V_ptr, (0, chunk_dim))
             O_ptr += chunk_dim
-    
-        offset += stride_batch
 
+        offset += stride_batch
