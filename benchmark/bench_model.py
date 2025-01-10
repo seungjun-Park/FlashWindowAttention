@@ -24,8 +24,8 @@ def backward(batch, method=BenchMethod.SWIN):
     y = torch.randint(0, 1000, size=(batch,)).cuda()
     if method == BenchMethod.SWIN:
         m = SwinTransformer(is_flash=False).cuda()
-        opt = torch.optim.Adam(m.parameters(), lr=1e-4)
-
+        opt = torch.optim.SGD(m.parameters(), lr=1e-4, momentum=0.9)
+        
         def _f(m, opt, x, y):
             opt.zero_grad()
             o = m.forward(x)

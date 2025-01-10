@@ -30,7 +30,8 @@ class WindowAttention(nn.Module):
         head_dim = dim // num_heads
         self.scale = qk_scale or head_dim**-0.5
         self.is_flash = is_flash
-
+        if is_flash:
+            assert (dim // num_heads) % 16 == 0, 'head_dim should be divisible by 16'
         # define a parameter table of relative position bias
         self.relative_position_bias_table = nn.Parameter(
             torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads)

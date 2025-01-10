@@ -65,7 +65,7 @@ if __name__ == '__main__':
     head_dim = [16, 128]
 
     for _batch, _head, _seq, _head_dim in itertools.product(batch, head, seq, head_dim):
-        print(f"batch={_batch}, head={_head}, seq={_seq}, head={_head}, head_dim={_head_dim}")
+        print(f"batch={_batch}, head={_head}, seq={_seq}, head_dim={_head_dim}")
         assert forward_core(_batch, _head, _seq, _head_dim)
         assert forward_core(_batch, _head, _seq, _head_dim, True)
         assert backward_core(_batch, _head, _seq, _head_dim)

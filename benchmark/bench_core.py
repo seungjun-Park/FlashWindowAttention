@@ -87,14 +87,14 @@ if __name__ == '__main__':
     print("Compare swin and flash_swin with float32")
     for _batch, _seq, _head_dim in itertools.product(batch, seq, head_dim):
         print(f"batch={_batch}, seq={_seq}, head_dim={_head_dim}")
-        t, memory = forward(_batch, head, _seq, _head_dim, None, False, BenchMethod.SWIN)
+        t, memory = forward(_batch, head, _seq, _head_dim, True, False, BenchMethod.SWIN)
         print(f"SWIN: {t:.4f} {memory:.4f}")
-        t, memory = forward(_batch, head, _seq, _head_dim, None, False, BenchMethod.FLASH_SWIN)
+        t, memory = forward(_batch, head, _seq, _head_dim, True, False, BenchMethod.FLASH_SWIN)
         print(f"FLASH_SWIN: {t:.4f} {memory:.4f}")
 
-        t, memory = backward(_batch, head, _seq, _head_dim, None, False, BenchMethod.SWIN)
+        t, memory = backward(_batch, head, _seq, _head_dim, True, False, BenchMethod.SWIN)
         print(f"SWIN: {t:.4f} {memory:.4f}")
-        t, memory = backward(_batch, head, _seq, _head_dim, None, False, BenchMethod.FLASH_SWIN)
+        t, memory = backward(_batch, head, _seq, _head_dim, True, False, BenchMethod.FLASH_SWIN)
         print(f"FLASH_SWIN: {t:.4f} {memory:.4f}")
 
     batch = [64, 256, 1024]
