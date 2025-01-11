@@ -1,6 +1,6 @@
 # Flash Window Attention: speedup the attention computation of Swin Transformer
 
-<img src="figs/per.png" width="75%">
+![](figs/per.png)
 
 ### Introduction
 Swin Transformer partitions an image into non-overlapping windows. Then it computes the attention output winthin each window. 
@@ -15,7 +15,7 @@ need for slower global memory access.
 We implement Flash Window Attention using Triton and PyTorch. Specifically, we develop GPU kernels using Triton and integrate them into PyTorch as an autograd
 function. Under typical settings, we achieve speedup on attention computation up to 300% and end-to-end running up to 30%.
 
-<img src="figs/alg.png" width="75%">
+![](figs/alg.png)
 
 ### Usage
 Install this package:

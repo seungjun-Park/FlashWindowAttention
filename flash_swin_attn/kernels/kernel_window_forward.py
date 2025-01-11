@@ -20,7 +20,6 @@ def _window_fwd_kernel(
     seq: tl.constexpr,
     seq_pad: tl.constexpr,
 ):
-    # 8 loop for each block
     batch_id = tl.program_id(0)
     head_id = tl.program_id(1)
 
