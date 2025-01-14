@@ -58,5 +58,13 @@ Set `is_flash=False` to use the window attention.
 
 For more details, please refer to our technical report:
 ```
-Flash Window Attention: speedup the attention computation for Swin Transformer 	
+@misc{zhang2025flashwindowattentionspeedup,
+      title={Flash Window Attention: speedup the attention computation for Swin Transformer}, 
+      author={Zhendong Zhang},
+      year={2025},
+      eprint={2501.06480},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2501.06480}, 
+}
 ```

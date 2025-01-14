@@ -7,6 +7,7 @@ setup(
     install_requires=[
         'torch',
         'einops',
+        'triton'
     ],
     entry_points={
         'console_scripts': [
@@ -15,7 +16,7 @@ setup(
     },
     author='Zhendong Zhang',
     author_email='zhd.zhang.ai@gmail.com',
-    description='Flash Swin attention: 10x faster shifted window attention',
+    description='Speedup the attention computation of Swin Transformer',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/zzd1992/FlashSwinAttention',
