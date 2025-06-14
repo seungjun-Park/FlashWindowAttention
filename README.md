@@ -51,7 +51,7 @@ y = layer(x)
 Set `is_flash=False` to use the window attention.
 
 ### Notice
-- Please make sure `dim//num_heads` is divisible by 16.
+- Please make sure `dim//num_heads` is divisible by `HEAD_CHUNK_DIM = 16`. You can manually tune `HEAD_CHUNK_DIM` in `flash_swin_attn.py`. Generally, the GPUs with large shared memory can use larger `HEAD_CHUNK_DIM` to achieve better performance.
 - The window size should be small, otherwise `out of on chip memory` error may occur.
 - When tested on RTX 4090, window size can be up to `11x11`. The default window size in Swin Transformer is `7x7`.
 - Dropout on attention matrix is not supported yet.
