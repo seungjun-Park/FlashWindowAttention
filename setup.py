@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+import platform
 
 setup(
     name='flash_swin_attn',
@@ -7,8 +8,9 @@ setup(
     install_requires=[
         'torch',
         'einops',
-        'triton'
+        'triton-windows' if platform.system() == 'Windows' else 'triton'
     ],
+
     entry_points={
         'console_scripts': [
             # Add command line scripts here
